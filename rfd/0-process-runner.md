@@ -24,9 +24,9 @@ Both library and API will leverage domain.
 ```
 process-runner/
 ├── api/
-|   ├── proto
-|   |    └── prunner.proto
-|	├── protogen
+|   └── proto
+|        └── prunner.proto
+|	     └──  protogen
 ├── client
 |   └── cli
 ├── internal
