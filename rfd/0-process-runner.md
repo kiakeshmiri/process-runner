@@ -122,6 +122,11 @@ func GetLogsStream() <-chan string {
 }  
 ```
 
+### Edge Cases
+
+* Jobs that ends quickly or crash upon running do not produce logs so listeining to logs stream won't produce any result. That's the best to check the status of the job before streaming logs
+* Jobs may crach at anytime. System should provide proper logs, update status and notify users
+
 ### resource control for CPU, Memory and Disk IO per job using cgroups.
 
 
