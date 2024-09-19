@@ -114,39 +114,20 @@ func Write(p []byte) (n int, err error) {
 func (so *outputLogs) GetLogsStream(ctx context.Context) <-chan string {
 	logChan := make(chan string)
 	go func() {
-		defer close(logChan)
-
-		firstScan := true
-		var pointer int
-
+		...
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				time.Sleep(time.Duration(time.Millisecond * 20))
+				time.Sleep(time.Duration(time.Millisecond * 10))
 
 				mu.Lock()
-
 				ln := len(so.data)
-
-				var chunk []byte
-
-				if ln > 0 {
-					if firstScan {
-						chunk = so.data[:ln]
-						firstScan = false
-					} else {
-						chunk = so.data[pointer:ln]
-					}
-					pointer = ln
-				}
-				if len(chunk) > 0 {
-					log := string(chunk)
-					logChan <- log
-				}
-
+				// read eaither from begining of so.data or continue reading  if it's not first read until cancel
 				mu.Unlock()
+
+				logChan <- log
 			}
 		}
 	}()
@@ -164,7 +145,7 @@ So based on above code only shared data among processes is ```so.data```. that's
 ### resource control for CPU, Memory and Disk IO per job using cgroups.
 
 
-Resource control can be added by using ```cgcreate``` command. It will create a group under ```/sys/fs/cgroup/```. for example running ```sudo cgcreate  -g memory,cpu,io:mygroup``` command will create the following file structure under /sys/fs/cgroup:
+Resource control can be added by using ```mkdir /sys/fs/cgroup/mygroup``` command. It will create a group under ```/sys/fs/cgroup/```. for example running ```mkdir /sys/fs/cgroup/mygroup``` command will create the following file structure under /sys/fs/cgroup/mygroup:
 
 ```
 cgroup.controllers      cgroup.type      io.max               memory.min           memory.swap.peak
@@ -181,14 +162,13 @@ cgroup.threads          cpu.weight.nice  memory.max           memory.swap.max
 ```
 
 
-After adding / updating the cpu, memory, io config the Job can be run by using ```cgexec```. for example ```sudo cgexec -g memory:mygroup myjob```
+After adding / updating the cpu, memory, io config the Job can be run by using ```cgexec```. for example ```sudo cgexec -g memory:jobgroup myjob```
 
 Ir will be done in code like this:
 
 ```go
-args := []string{"-g", fmt.Sprintf("%s:proc-%s", options, job)}
 
-exec.Command("cgcreate", args...).Run()
+exec.Command("mkdir /sys/fs/cgroup/jobgroup").Run()
 ...
 cmdArgs := []string{"-g", fmt.Sprintf("%s:proc-%s", opts, p.Job), p.Job}
 cmdArgs = append(args, p.Args...)
@@ -196,30 +176,14 @@ cmdArgs = append(args, p.Args...)
 cmd = exec.Command("cgexec", cmdArgs...)
 ```
 
-### Resource isolation for using PID, mount, and networking namespaces.
+For test the following limitations will be added on cpu, io and memory. 
 
-In linux, The unshare command creates new namespaces. The unshare command in Go is not available because it is not possible to use syscall.Unshare from Go. This is due to a known problem with any system call that modifies the file system context or name space of a single process. To accomodate resource isolation without calling ```unshare``` command which considers as anti-pattern, go ```C``` package will be used. In that case based on user selection (any combination of PID, mount or networking) the following flags can be used for unshare command in c stdlib :
 
-* CLONE_NEWPID
-* CLONE_NEWNS
-* CLONE_NEWNET
+```bash
+512000 > /sys/fs/cgroup/cgroup/jobgroup/cpu.shares
+10000000 > /sys/fs/cgroup/jobgroup/memory.limit_in_bytes
+10000000 > /sys/fs/cgroup/jobgroup/io.max
 
-These flags will be used in syntax similar to the following:
-
-```c
-#include <stdlib.h>
-
-unshare(CLONE_NEWNS)
-```
-
-after calling above call using C package in go, a wrapper will be handle different cases in scenarios like mount or netwrok using syscall.
-
-e.g.
-
-```go
-func Mount(source, destination string) error {
-	return syscall.Mount(source, dstination, "", syscall.MS_BIND, "")
-}
 ```
 
 ## API Server
@@ -268,7 +232,6 @@ message GetStatusRequest {
 
 message GetStatusResponse {
   Status status = 1;
-  string guid = 2;
   int32 connections = 3; // number of users streaming the logs
 }
 
@@ -291,13 +254,51 @@ enum Status {
 
 ### API Authentication an Authorization
 
-Authrntication is implemented with mTLS. Server uses cryto and X509 to load and validate server keys and certifications and pass the ```tlsConfig``` to grpc server. In this way both client and server uses they keys to encypt the data and all communucation is encrypted.
 
+In TLS, any client who has the server certificate can connect to the server, so server is not able to authenticate client. But in mTLS, the server also needs to have the client certificate, while the client needs to have the server certificate. Therefore only the registered client can be connected to the server.
+
+If the server is not enabled TLS or mTLS, these communications are not happening via encrypted channels. And also, anyone can invoke this gRPC API since this is exposed to the public without any security.
+
+by using mTLS, The client certificate is also needed to be added as a trusted certificate in the server. Server needs to have a list of certificates of the intended clients and only allow those clients to access the server. With proper interceptor on server, we can retrieve CN that client has been used to generate certs. A roll based aithorization table will be defined on server and interceptor will decrypt tls certificate using server keys and extract CN then lookup in the role table for authorization usage. 
+
+Obviously for this demo, roles table will be define in memory. 
+
+Server uses cryto and X509 to load and validate server keys and certifications and pass the ```tlsConfig``` to grpc server. In this way both client and server uses they keys to encypt the data and all communucation is encrypted.
+
+The example of server interceptor:
+
+```go
+	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
+		opts := x509.VerifyOptions{
+			Roots:         capool,
+			CurrentTime:   time.Now(),
+			Intermediates: x509.NewCertPool(),
+			KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
+			DNSName:       strings.Split(helloInfo.Conn.RemoteAddr().String(), ":")[0],
+		}
+		vd, err := verifiedChains[0][0].Verify(opts)
+
+		CN := vd[0][0].Issuer.String()
+		return err
+	}
+...
+
+client := CN
+authMap := map[client][]AllowedRPCNames
+
+func callInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	// if clien does not exists or MethodName does nor exists in role map retuen no authorized.
+}
+
+
+```
+
+X.509 will be used to generate both client and server certificates
 
 The keys will get generated using cfssl:
 
 ```bash
-cfssl selfsign -config cfssl.json --profile rootca "Teleport CA" csr.json | cfssljson -bare root
+cfssl selfsign -config cfssl.json --profile rootca "tp CA" csr.json | cfssljson -bare root
 
 cfssl genkey csr.json | cfssljson -bare server
 cfssl genkey csr.json | cfssljson -bare client
@@ -320,37 +321,7 @@ csr.json:
   }
 ```
 
-Api Authorization will use OAuth2 and pass token to grpc client call and server validate it through interceptor on sever side:
-
-```go
-func valid(authorization []string) bool {
-	if len(authorization) < 1 {
-		return false
-	}
-	token := strings.TrimPrefix(authorization[0], "Bearer ")
-
-	return token == "kia-token"
-}
-
-
-func ensureValidKiaToken(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
-	md, ok := metadata.FromIncomingContext(ctx)
-	if !ok {
-		return nil, errMissingMetadata
-	}
-
-	if !valid(md["authorization"]) {
-		return nil, errInvalidToken
-	}
-	return handler(ctx, req)
-}
-
-opts := []grpc.ServerOption{
-		grpc.UnaryInterceptor(ensureValidKiaToken),
-		grpc.Creds(tlsConfig),
-		grpc.UnaryInterceptor(MiddlewareHandler),
-	}
-```
+For simplicity in this demo, both client and server will use the same config (i.e. "CN": "localhost") but in prod, the client and server config are different.
 
 ## Client 
 
@@ -360,66 +331,6 @@ Client is designed to communicate through GRPC as only protocol for now. It basi
 ### Client Authentication
 
 Similar to server, Client needs to load and validate keys and certifications, for Authorization OAuth2 will be used to pass token to client call.
-
-```go
-
-tlsConfig, err := LoadTLSConfig()
-
-
-func NewClient() (client prunner.ProcessServiceClient, err error) {
-
-	tlsConfig, err := LoadTLSConfig()
-	if err != nil {
-		panic(err)
-	}
-
-	perRPC := oauth.TokenSource{TokenSource: oauth2.StaticTokenSource(fetchToken())}
-
-	conn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(tlsConfig), grpc.WithPerRPCCredentials(perRPC))
-	if err != nil {
-		panic(err)
-	}
-
-	return prunner.NewProcessServiceClient(conn), nil
-}
-
-func fetchToken() *oauth2.Token {
-	return &oauth2.Token{
-		AccessToken: "kia-token",
-	}
-}
-
-certFile := "../../../keys/client.pem"
-keyFile := "../../../keys/client-key.pem"
-caFile := "../../../keys/root.pem"
-
-func LoadTLSConfig() (credentials.TransportCredentials, error) {
-
-	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load client certification: %w", err)
-	}
-
-	ca, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil, fmt.Errorf("faild to read CA certificate: %w", err)
-	}
-
-	capool := x509.NewCertPool()
-	if !capool.AppendCertsFromPEM(ca) {
-		return nil, fmt.Errorf("faild to append the CA certificate to CA pool")
-	}
-
-	tlsConfig := &tls.Config{
-		Certificates: []tls.Certificate{certificate},
-		RootCAs:      capool,
-	}
-
-	return credentials.NewTLS(tlsConfig), nil
-}
-
-```
-For the sake of this challenge, the code here forgoes any of the usual OAuth2 token validation and instead checks for a token matching an arbitrary string (e.g. kia-token).
 
 ### Cli
 
