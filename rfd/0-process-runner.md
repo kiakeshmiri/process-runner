@@ -25,8 +25,8 @@ Both library and API will leverage domain.
 process-runner/
 ├── api/
 |   └── proto
-|        └── prunner.proto
-|	     └──  protogen
+|   |   └── prunner.proto
+|	└──  protogen
 ├── client
 |   └── cli
 ├── internal
@@ -60,13 +60,13 @@ Worker library with methods to start/stop/query status and stream the output of 
 
 Jobs Library and GRPC api are placed in the same folder for simlicity in this challange, however they can be mored to seperate modules when needed. The references and dependencies are handled through go workspace.
 
-jobs.go file under lib folder handles the job related requests. A function called `ProcessRequest` will be the entry point for start and stop requests. `ProcessRequest` will consume a map storing Data Structure containing pid, the status of the process (started, stopped), logs.
+jobs.go file under lib folder handles the job related requests. A function called `ProcessRequest` will be the entry point for start and stop requests. `ProcessRequest` will consume a map storing Data Structure containing guid, the status of the process (started, stopped), logs.
 
 
 ```go
 type Process struct {
 	Logs    *outputLogs 
-	Pid     int
+	Guid    string
 	Command string
 	Job     string
 	Args    []string
@@ -77,11 +77,11 @@ type Process struct {
 
 for simlicity, status will be only "stopped" and "Started" or the string value of the error if Cmd.Start() or Cmd.Process.Kill() fails. Both start and stop command will run in go routine and do not block, therefore resource isolation through mutex is needed.
 
-Status can be retrieve by simply accessing map using pid.
+Status can be retrieve by simply accessing map using guid.
 
 ```go
-pId := xxxxxx
-processMap[pId].Status
+guId := xxxxxx
+processMap[guId].Status
 ```
 
 Logs will be a little more ccmplicated since it needs to return stored logs from the time of process start and then stream the rest of logs. the function will run in goroutine and will return a directional channel. The method will reside in domain object.
@@ -92,9 +92,15 @@ GetLogsStream(ctx context.Context) <-chan string
 
 ### Syncronization
 
-Since `map[pid]domain.Process` will be a shared among different goroutines reading and writing to it simultanously, `sync.Mutex` will be used to lock the memory during access. 
+Since `map[guid]domain.Process` will be a shared among different goroutines reading and writing to it simultanously, `sync.Mutex` will be used to lock the memory during access. 
 
 One of the examples of need for Mutex is when `io.writer` is constantly writing on the `[]byte` and the same time client is streaming the logs.
+
+It will transition the client from reading the log history to waiting by reading the []byte that is being written by Cmd output io.writer. It read it all and sent it as first value in channel and then transition to channel. of course it will lock the byte array when it's being read.
+
+if the process is completed, there won't be any new value added to []byte so channel won't receive any new value. We can check the status of the job periodically during stream and end streaming if process is ended.
+
+each user will read the stream in a new goroutine. the index will initiate for each user on staring stream so with proper mutex usage multiple users can stream the same job in different times reading fron index 0 to the end and keep waiting for new values in the channel.
 
 ```go
 
@@ -105,27 +111,55 @@ func Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func GetLogsStream() <-chan string {
+func (so *outputLogs) GetLogsStream(ctx context.Context) <-chan string {
 	logChan := make(chan string)
 	go func() {
-      ...
-      
-      mu.Lock()
+		defer close(logChan)
 
-      l := len(so.Logs)
-      bytes := so.Logs[x:l]
-      
-      defer mu.Unlock()
+		firstScan := true
+		var pointer int
 
-      ...
-  }  
-}  
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				time.Sleep(time.Duration(time.Millisecond * 20))
+
+				mu.Lock()
+
+				ln := len(so.data)
+
+				var chunk []byte
+
+				if ln > 0 {
+					if firstScan {
+						chunk = so.data[:ln]
+						firstScan = false
+					} else {
+						chunk = so.data[pointer:ln]
+					}
+					pointer = ln
+				}
+				if len(chunk) > 0 {
+					log := string(chunk)
+					logChan <- log
+				}
+
+				mu.Unlock()
+			}
+		}
+	}()
+	return logChan
+}
+
 ```
+So based on above code only shared data among processes is ```so.data```. that's why it gets locked on both write (by process) and read (by client) to guaranty the syncronization.
 
 ### Edge Cases
 
 * Jobs that ends quickly or crash upon running do not produce logs so listeining to logs stream won't produce any result. That's the best to check the status of the job before streaming logs
-* Jobs may crach at anytime. System should provide proper logs, update status and notify users
+* Jobs may crash at anytime. System should provide proper logs, update status and notify users
 
 ### resource control for CPU, Memory and Disk IO per job using cgroups.
 
@@ -149,7 +183,18 @@ cgroup.threads          cpu.weight.nice  memory.max           memory.swap.max
 
 After adding / updating the cpu, memory, io config the Job can be run by using ```cgexec```. for example ```sudo cgexec -g memory:mygroup myjob```
 
+Ir will be done in code like this:
 
+```go
+args := []string{"-g", fmt.Sprintf("%s:proc-%s", options, job)}
+
+exec.Command("cgcreate", args...).Run()
+...
+cmdArgs := []string{"-g", fmt.Sprintf("%s:proc-%s", opts, p.Job), p.Job}
+cmdArgs = append(args, p.Args...)
+
+cmd = exec.Command("cgexec", cmdArgs...)
+```
 
 ### Resource isolation for using PID, mount, and networking namespaces.
 
@@ -201,18 +246,16 @@ service ProcessService {
 message StartProcessRequest {
   string job = 1;
   repeated string args = 2;
-  repeated CgroupOprions cgroup_oprions = 3;
-  repeated UnshareOprions unshare_otions = 4;
 }
 
 message StartProcessResponse {
-  string status = 1;
-  int32 pid = 2;
+  Status status = 1;
+  string guid = 2;
 }
 
 message StopProcessRequest {
-  string Status = 1;
-  int32 pid = 2;
+  Status Status = 1;
+  string guid = 2;
 }
 
 message StopProcessResponse {
@@ -220,15 +263,17 @@ message StopProcessResponse {
 }
 
 message GetStatusRequest {
-  int32 pid = 1;
+  string guid = 1;
 }
 
 message GetStatusResponse {
   Status status = 1;
+  string guid = 2;
+  int32 connections = 3; // number of users streaming the logs
 }
 
 message GetLogsRequest {
-  int32 pid = 1;
+  string guid = 1;
 }
 
 message GetLogsResponse {
@@ -238,86 +283,111 @@ message GetLogsResponse {
 enum Status {
   RUNNING = 0;
   STOPPED = 1;
-}
-
-enum CgroupOprions {
-  MEMORY = 0;
-  CPU = 1;
-  IO = 2;
-}
-
-enum UnshareOprions {
-  PID = 0;
-  NETWORK = 1;
-  MOUNT = 2;
+  CRASHED = 2;
 }
 
 ```
 
-```go
-grpcServer := grpc.NewServer(grpc.Creds(tlsConfig), ...)
-```
 
-### API Authentication
+### API Authentication an Authorization
 
 Authrntication is implemented with mTLS. Server uses cryto and X509 to load and validate server keys and certifications and pass the ```tlsConfig``` to grpc server. In this way both client and server uses they keys to encypt the data and all communucation is encrypted.
 
+
+The keys will get generated using cfssl:
+
+```bash
+cfssl selfsign -config cfssl.json --profile rootca "Teleport CA" csr.json | cfssljson -bare root
+
+cfssl genkey csr.json | cfssljson -bare server
+cfssl genkey csr.json | cfssljson -bare client
+
+cfssl sign -ca root.pem -ca-key root-key.pem -config cfssl.json -profile server server.csr | cfssljson -bare server
+cfssl sign -ca root.pem -ca-key root-key.pem -config cfssl.json -profile client client.csr | cfssljson -bare client
+```
+
+csr.json:
+
+```json
+{
+    "hosts": ["localhost", "127.0.0.1"],
+    "key": {
+      "algo": "ecdsa",
+      "size": 256
+    },
+    "CN": "localhost",
+    "names": []
+  }
+```
+
+Api Authorization will use OAuth2 and pass token to grpc client call and server validate it through interceptor on sever side:
+
 ```go
-
-certFile := "../../keys/server.pem"
-keyFile := "../../keys/server-key.pem"
-caFile := "../../keys/root.pem"
-
-
-func LoadTlSConfig() (credentials.TransportCredentials, error) {
-
-	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, fmt.Errorf("failed to load server certification: %w", err)
+func valid(authorization []string) bool {
+	if len(authorization) < 1 {
+		return false
 	}
+	token := strings.TrimPrefix(authorization[0], "Bearer ")
 
-	data, err := os.ReadFile(caFile)
-	if err != nil {
-		return nil, fmt.Errorf("faild to read CA certificate: %w", err)
-	}
-
-	capool := x509.NewCertPool()
-	if !capool.AppendCertsFromPEM(data) {
-		return nil, fmt.Errorf("unable to append the CA certificate to CA pool")
-	}
-
-	tlsConfig := &tls.Config{
-		ClientAuth:   tls.RequireAndVerifyClientCert,
-		Certificates: []tls.Certificate{certificate},
-		ClientCAs:    capool,
-	}
-	return credentials.NewTLS(tlsConfig), nil
+	return token == "kia-token"
 }
 
 
+func ensureValidKiaToken(ctx context.Context, req any, _ *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (any, error) {
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return nil, errMissingMetadata
+	}
+
+	if !valid(md["authorization"]) {
+		return nil, errInvalidToken
+	}
+	return handler(ctx, req)
+}
+
+opts := []grpc.ServerOption{
+		grpc.UnaryInterceptor(ensureValidKiaToken),
+		grpc.Creds(tlsConfig),
+		grpc.UnaryInterceptor(MiddlewareHandler),
+	}
 ```
 
 ## Client 
 
-Client is designed to communicate through GRPC as only protocol for now. It basically leveraging generated proto client stub to communicate with server. for simplicity port and address are hardcoded.
+Client is designed to communicate through GRPC as only protocol for now. It basically leveraging generated proto client stub to communicate with server. for simplicity port, address and auth token are hardcoded.
 
-```go
-	conn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(tlsConfig))
-
-```
 
 ### Client Authentication
 
-Similar to server, Client needs to load and validate keys and certifications.
+Similar to server, Client needs to load and validate keys and certifications, for Authorization OAuth2 will be used to pass token to client call.
 
 ```go
 
-
 tlsConfig, err := LoadTLSConfig()
 
-conn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(tlsConfig))
 
-...
+func NewClient() (client prunner.ProcessServiceClient, err error) {
+
+	tlsConfig, err := LoadTLSConfig()
+	if err != nil {
+		panic(err)
+	}
+
+	perRPC := oauth.TokenSource{TokenSource: oauth2.StaticTokenSource(fetchToken())}
+
+	conn, err := grpc.NewClient(*addr, grpc.WithTransportCredentials(tlsConfig), grpc.WithPerRPCCredentials(perRPC))
+	if err != nil {
+		panic(err)
+	}
+
+	return prunner.NewProcessServiceClient(conn), nil
+}
+
+func fetchToken() *oauth2.Token {
+	return &oauth2.Token{
+		AccessToken: "kia-token",
+	}
+}
 
 certFile := "../../../keys/client.pem"
 keyFile := "../../../keys/client-key.pem"
@@ -349,27 +419,24 @@ func LoadTLSConfig() (credentials.TransportCredentials, error) {
 }
 
 ```
+For the sake of this challenge, the code here forgoes any of the usual OAuth2 token validation and instead checks for a token matching an arbitrary string (e.g. kia-token).
 
 ### Cli
 
 Cli is the main interface for communicate with server. Cobra and Viper third party library will be used for implementation. The following commands and options will be implemented to fulfil the requirements:
 
 ```
-* start-job <Job> <Arguments> --cgroup-opts=<MCI> --unshare-opts=<PNM> : Starts a new job and returns pId
-* stopJob <pId> 													   : Kills the process
-* getStatus <pId> 													   : display status of the process
-* getLogs <pId> 													   : Streams the process logs 
-
-MCI = [MEMORY, CPU, IO]
-PNM = [PID, NETWORK, MOUNT]
+* start-job <Job> <Arguments>  	: Starts a new job and returns guid
+* stopJob <guid> 				: Kills the process
+* getStatus <guid> 				: display status of the process
+* getLogs <guid> 				: Streams the process logs 
 ```
 
-cgroup-opts and -unshare-opts accepts any combinations. 
 
 #### Examples
 
-* cli startJob ping google.com --cgroup-opts=C --unshare-opts=P
-* cli startJob myjob --cgroup-opts=CI --unshare-opts=PNM
+* cli startJob ping google.com 
+* cli startJob myjob
 * cli stopJob 68510
 * cli getStatus 68510
 * cli getLogs 68510
