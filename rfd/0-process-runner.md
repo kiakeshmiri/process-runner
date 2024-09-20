@@ -228,12 +228,11 @@ message StartProcessRequest {
 
 message StartProcessResponse {
   Status status = 1;
-  string guid = 2;
+  string uuid = 2;
 }
 
 message StopProcessRequest {
-  Status Status = 1;
-  string guid = 2;
+  string uuid = 2;
 }
 
 message StopProcessResponse {
@@ -241,20 +240,22 @@ message StopProcessResponse {
 }
 
 message GetStatusRequest {
-  string guid = 1;
+  string uuid = 1;
 }
 
 message GetStatusResponse {
   Status status = 1;
+  string err_status = 2;
   int32 connections = 3; // number of users streaming the logs
 }
 
 message GetLogsRequest {
-  string guid = 1;
+  string uuid = 1;
 }
 
 message GetLogsResponse {
   string log = 1;
+  string err_status = 2;
 }
 
 enum Status {
