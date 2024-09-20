@@ -176,15 +176,29 @@ cmdArgs = append(args, p.Args...)
 cmd = exec.Command("cgexec", cmdArgs...)
 ```
 
-For test the following limitations will be added on cpu, io and memory. 
+### Suggested cgroup Limitations:
 
+memory.low = 10G makes the process exempt from taking away memory if usage is under 10 GB. The only time that memory can take away id a global memory shortage.
+this will help to avoid limiting all other processes memory.
 
 ```bash
-512000 > /sys/fs/cgroup/cgroup/jobgroup/cpu.shares
-10000000 > /sys/fs/cgroup/jobgroup/memory.limit_in_bytes
-10000000 > /sys/fs/cgroup/jobgroup/io.max
-
+echo "10G" > memory.low
 ```
+
+"io.max" limits the maximum BPS and/or IOPS that a cgroup can consume
+on an IO device and is an example of this type.
+
+```bash
+echo "8:16 wbps=1Mib wiops=120" > io.max
+```
+
+"cpu.weight" proportionally distributes CPU cycles to active children .
+
+```bash
+echo "512" > cpu.wwight
+```
+
+The discussion about using nice is out of scope but I can explain it if needed.
 
 ## API Server
 
