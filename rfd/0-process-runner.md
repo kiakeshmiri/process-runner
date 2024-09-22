@@ -386,9 +386,9 @@ Cli is the main interface for communicate with server. Cobra and Viper third par
 
 ```
 * startJob <Job> <Arguments>  	: Starts a new job and returns guid
-* stopJob <guid> 				: Kills the process
-* getStatus <guid> 				: display status of the process
-* getLogs <guid> 				: Streams the process logs 
+* stopJob <uuid> 				: Kills the process
+* getStatus <uuid> 				: display status of the process
+* getLogs <uuid> 				: Streams the process logs 
 ```
 
 
@@ -396,9 +396,9 @@ Cli is the main interface for communicate with server. Cobra and Viper third par
 
 * jobcli startJob ping google.com 
 * jobcli startJob myjob
-* jobcli stopJob 68510
-* jobcli getStatus 68510
-* jobcli getLogs 68510
+* jobcli stopJob 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
+* jobcli getStatus 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
+* jobcli getLogs 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
 
 ## Scripts
 
