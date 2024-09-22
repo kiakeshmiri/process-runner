@@ -11,7 +11,7 @@ authors: Kiarash Keshmiri (kiakeshmiri@gmail.com)
 
 ## Structure
 
-In order to guaranty maintaiabilty, readability and decoupling logic from domain, the project if complying domain driven design pattern. This pattern provides a way to use different ports like http through openapi, GRPC, ... 
+In order to guaranty maintainability, readability and decoupling logic from domain, the project if complying domain driven design pattern. This pattern provides a way to use different ports like http through openapi, GRPC, ... 
 
 for the purpose if this demo only GRPC port is included.
 
@@ -28,11 +28,10 @@ process-runner/
 |   |   └── prunner.proto
 |	└──  protogen
 ├── client
-|   └── cli
+|   └── cmd
 ├── internal
 |   └── prunner
 |       ├── app
-|       ├── client
 |       ├── domain
 |       ├── lib
 |       ├── ports
@@ -58,7 +57,7 @@ Worker library with methods to start/stop/query status and stream the output of 
 
 ## Details
 
-Jobs Library and GRPC api are placed in the same folder for simlicity in this challange, however they can be mored to seperate modules when needed. The references and dependencies are handled through go workspace.
+Jobs Library and GRPC api are placed in the same folder for simplicity in this challenge, however they can be mored to seperate modules when needed. The references and dependencies are handled through go workspace.
 
 jobs.go file under lib folder handles the job related requests. A function called `ProcessRequest` will be the entry point for start and stop requests. `ProcessRequest` will consume a map storing Data Structure containing guid, the status of the process (started, stopped), logs.
 
@@ -75,7 +74,7 @@ type Process struct {
 }
 ```
 
-for simlicity, status will be only "stopped" and "Started" or the string value of the error if Cmd.Start() or Cmd.Process.Kill() fails. Both start and stop command will run in go routine and do not block, therefore resource isolation through mutex is needed.
+for  simplicity, status will be only "stopped" and "Started" or the string value of the error if Cmd.Start() or Cmd.Process.Kill() fails. Both start and stop command will run in go routine and do not block, therefore resource isolation through mutex is needed.
 
 Status can be retrieve by simply accessing map using guid.
 
@@ -84,7 +83,7 @@ guId := xxxxxx
 processMap[guId].Status
 ```
 
-Logs will be a little more ccmplicated since it needs to return stored logs from the time of process start and then stream the rest of logs. the function will run in goroutine and will return a directional channel. The method will reside in domain object.
+Logs will be a little more complicated since it needs to return stored logs from the time of process start and then stream the rest of logs. the function will run in goroutine and will return a directional channel. The method will reside in domain object.
 
 ```go
 GetLogsStream(ctx context.Context) <-chan string
@@ -92,7 +91,7 @@ GetLogsStream(ctx context.Context) <-chan string
 
 ### Syncronization
 
-Since `map[guid]domain.Process` will be a shared among different goroutines reading and writing to it simultanously, `sync.Mutex` will be used to lock the memory during access. 
+Since `map[guid]domain.Process` will be a shared among different goroutines reading and writing to it simultaneously, `sync.Mutex` will be used to lock the memory during access. 
 
 One of the examples of need for Mutex is when `io.writer` is constantly writing on the `[]byte` and the same time client is streaming the logs.
 
@@ -100,7 +99,7 @@ It will transition the client from reading the log history to waiting by reading
 
 if the process is completed, there won't be any new value added to []byte so channel won't receive any new value. We can check the status of the job periodically during stream and end streaming if process is ended.
 
-each user will read the stream in a new goroutine. the index will initiate for each user on staring stream so with proper mutex usage multiple users can stream the same job in different times reading fron index 0 to the end and keep waiting for new values in the channel.
+each user will read the stream in a new goroutine. the index will initiate for each user on staring stream so with proper mutex usage multiple users can stream the same job in different times reading from index 0 to the end and keep waiting for new values in the channel.
 
 ```go
 
@@ -135,12 +134,16 @@ func (so *outputLogs) GetLogsStream(ctx context.Context) <-chan string {
 }
 
 ```
-So based on above code only shared data among processes is ```so.data```. that's why it gets locked on both write (by process) and read (by client) to guaranty the syncronization.
+So based on above code only shared data among processes is ```so.data```. that's why it gets locked on both write (by process) and read (by client) to guaranty the synchronization.
 
 ### Edge Cases
 
-* Jobs that ends quickly or crash upon running do not produce logs so listeining to logs stream won't produce any result. That's the best to check the status of the job before streaming logs
+* Jobs that ends quickly or crash upon running do not produce logs so subscribing to logs stream won't produce any result. That's the best to check the status of the job before streaming logs
 * Jobs may crash at anytime. System should provide proper logs, update status and notify users
+
+### Race condidions
+
+Application should lock resource properly in this case we are talking about []byte that is shared between cmd.Stdout and getLogs goroutine. cmd may keep adding data to the []byte while it's running, and other goroutined will keep reading or waiting for new data to be added. To make sure there is no race condition server will build with -race option which is not recommended for production but it will help debugging.
 
 ### resource control for CPU, Memory and Disk IO per job using cgroups.
 
@@ -224,6 +227,7 @@ service ProcessService {
 message StartProcessRequest {
   string job = 1;
   repeated string args = 2;
+  string caller = 3;
 }
 
 message StartProcessResponse {
@@ -232,7 +236,8 @@ message StartProcessResponse {
 }
 
 message StopProcessRequest {
-  string uuid = 2;
+  string uuid = 1;
+  string caller = 2;
 }
 
 message StopProcessResponse {
@@ -241,21 +246,21 @@ message StopProcessResponse {
 
 message GetStatusRequest {
   string uuid = 1;
+  string caller = 2;
 }
 
 message GetStatusResponse {
   Status status = 1;
-  string err_status = 2;
-  int32 connections = 3; // number of users streaming the logs
+  string caller = 2; // The user who started the process
 }
 
 message GetLogsRequest {
   string uuid = 1;
+  string caller = 2;
 }
 
 message GetLogsResponse {
-  string log = 1;
-  string err_status = 2;
+  bytes log = 1;
 }
 
 enum Status {
@@ -263,6 +268,7 @@ enum Status {
   STOPPED = 1;
   CRASHED = 2;
 }
+
 
 ```
 
@@ -274,35 +280,40 @@ In TLS, any client who has the server certificate can connect to the server, so 
 
 If the server is not enabled TLS or mTLS, these communications are not happening via encrypted channels. And also, anyone can invoke this gRPC API since this is exposed to the public without any security.
 
-by using mTLS, The client certificate is also needed to be added as a trusted certificate in the server. Server needs to have a list of certificates of the intended clients and only allow those clients to access the server. With proper interceptor on server, we can retrieve CN that client has been used to generate certs. A roll based aithorization table will be defined on server and interceptor will decrypt tls certificate using server keys and extract CN then lookup in the role table for authorization usage. 
+by using mTLS, The client certificate is also needed to be added as a trusted certificate in the server. Server needs to have a list of certificates of the intended clients and only allow those clients to access the server. Client will extract cname from . 
 
 Obviously for this demo, roles table will be define in memory. 
 
-Server uses cryto and X509 to load and validate server keys and certifications and pass the ```tlsConfig``` to grpc server. In this way both client and server uses they keys to encypt the data and all communucation is encrypted.
+Server uses crypto and X509 to load and validate client certifications and pass the ```tlsConfig``` to grpc client connection. In the process of loading config client will read cname from cert file and will populate it to caller property on each call sending to server to roll based authorization. 
 
-The example of server interceptor:
+The example of client TLS config:
 
 ```go
-	return func(rawCerts [][]byte, verifiedChains [][]*x509.Certificate) error {
-		opts := x509.VerifyOptions{
-			Roots:         capool,
-			CurrentTime:   time.Now(),
-			Intermediates: x509.NewCertPool(),
-			KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageClientAuth},
-			DNSName:       strings.Split(helloInfo.Conn.RemoteAddr().String(), ":")[0],
-		}
-		vd, err := verifiedChains[0][0].Verify(opts)
+	func LoadTLSConfig(certFile string, keyFile string, caFile string) (credentials.TransportCredentials, string, error) {
 
-		CN := vd[0][0].Issuer.String()
-		return err
+	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to load client certification: %w", err)
 	}
-...
 
-client := CN
-authMap := map[client][]AllowedRPCNames
+	cn := certificate.Leaf.Subject.CommonName
 
-func callInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
-	// if clien does not exists or MethodName does nor exists in role map retuen no authorized.
+	ca, err := os.ReadFile(caFile)
+	if err != nil {
+		return nil, "", fmt.Errorf("faild to read CA certificate: %w", err)
+	}
+
+	capool := x509.NewCertPool()
+	if !capool.AppendCertsFromPEM(ca) {
+		return nil, "", fmt.Errorf("faild to append the CA certificate to CA pool")
+	}
+
+	tlsConfig := &tls.Config{
+		Certificates: []tls.Certificate{certificate},
+		RootCAs:      capool,
+	}
+
+	return credentials.NewTLS(tlsConfig), cn, nil
 }
 
 
@@ -313,16 +324,17 @@ X.509 will be used to generate both client and server certificates
 The keys will get generated using cfssl:
 
 ```bash
-cfssl selfsign -config cfssl.json --profile rootca "tp CA" csr.json | cfssljson -bare root
+cfssl selfsign -config cfssl.json --profile rootca "Teleport CA" server-csr.json | cfssljson -bare root
+cfssl selfsign -config cfssl.json --profile rootca "Teleport CA" client-csr.json | cfssljson -bare root
 
-cfssl genkey csr.json | cfssljson -bare server
-cfssl genkey csr.json | cfssljson -bare client
+cfssl genkey server-csr.json | cfssljson -bare server
+cfssl genkey client-csr.json | cfssljson -bare client
 
 cfssl sign -ca root.pem -ca-key root-key.pem -config cfssl.json -profile server server.csr | cfssljson -bare server
 cfssl sign -ca root.pem -ca-key root-key.pem -config cfssl.json -profile client client.csr | cfssljson -bare client
 ```
 
-csr.json:
+server-csr.json:
 
 ```json
 {
@@ -333,14 +345,35 @@ csr.json:
     },
     "CN": "localhost",
     "names": []
-  }
+}
 ```
 
-For simplicity in this demo, both client and server will use the same config (i.e. "CN": "localhost") but in prod, the client and server config are different.
+client-csr.json:
+
+```json
+{
+    //...
+    "CN": "Client1",
+    //...
+}
+```
+
+#### authorization table
+
+for this demo simple authorization table is hard coded and there is no roles or groups
+
+```go
+	authMap := map[string][]string{
+		"Client1": {"start", "stop", "getStatus", "getLogs"},
+	}
+```
+
+Any call that client cname does not exists in the table will be rejected. for more control this can changed to client ip. meaning that client ip should be whitelisted for call.
+
 
 ## Client 
 
-Client is designed to communicate through GRPC as only protocol for now. It basically leveraging generated proto client stub to communicate with server. for simplicity port, address and auth token are hardcoded.
+Client is designed to communicate through GRPC as only protocol for now. It basically leveraging generated proto client stub to communicate with server. for simplicity port, address and auth token are hard coded.
 
 
 ### Client Authentication
@@ -352,7 +385,7 @@ Similar to server, Client needs to load and validate keys and certifications, fo
 Cli is the main interface for communicate with server. Cobra and Viper third party library will be used for implementation. The following commands and options will be implemented to fulfil the requirements:
 
 ```
-* start-job <Job> <Arguments>  	: Starts a new job and returns guid
+* startJob <Job> <Arguments>  	: Starts a new job and returns guid
 * stopJob <guid> 				: Kills the process
 * getStatus <guid> 				: display status of the process
 * getLogs <guid> 				: Streams the process logs 
@@ -361,11 +394,11 @@ Cli is the main interface for communicate with server. Cobra and Viper third par
 
 #### Examples
 
-* cli startJob ping google.com 
-* cli startJob myjob
-* cli stopJob 68510
-* cli getStatus 68510
-* cli getLogs 68510
+* jobcli startJob ping google.com 
+* jobcli startJob myjob
+* jobcli stopJob 68510
+* jobcli getStatus 68510
+* jobcli getLogs 68510
 
 ## Scripts
 

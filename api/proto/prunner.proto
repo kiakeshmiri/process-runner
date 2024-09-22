@@ -14,6 +14,7 @@ service ProcessService {
 message StartProcessRequest {
   string job = 1;
   repeated string args = 2;
+  string caller = 3;
 }
 
 message StartProcessResponse {
@@ -22,7 +23,8 @@ message StartProcessResponse {
 }
 
 message StopProcessRequest {
-  string uuid = 2;
+  string uuid = 1;
+  string caller = 2;
 }
 
 message StopProcessResponse {
@@ -31,21 +33,21 @@ message StopProcessResponse {
 
 message GetStatusRequest {
   string uuid = 1;
+  string caller = 2;
 }
 
 message GetStatusResponse {
   Status status = 1;
-  string err_status = 2;
-  int32 connections = 3; // number of users streaming the logs
+  string caller = 2; // The user who started the process
 }
 
 message GetLogsRequest {
   string uuid = 1;
+  string caller = 2;
 }
 
 message GetLogsResponse {
-  string log = 1;
-  string err_status = 2;
+  bytes log = 1;
 }
 
 enum Status {
