@@ -22,24 +22,25 @@ Both library and API will leverage domain.
 `api / library` package file structure:
 
 ```
-process-runner/
+process-runner
 ├── api/
-|   └── proto
+|   └── proto/
 |   |   └── prunner.proto
-|	└──  protogen
+|	└──  protogen/
 ├── client
-|   └── cmd
-├── internal
-|   └── prunner
-|       ├── app
-|       ├── domain
-|       ├── lib
-|       ├── ports
-|       ├── server
-|       └── service
-├── keys
-├── rfd
-├── scripts
+|   └── cmd/
+├── server/
+|	├── internal/
+|	|   └── prunner
+|	|       ├── app/
+|	|       ├── ports/
+|	|       ├── server/
+|	|       └── service/
+|   ├── domain/
+|   └── lib/
+├── keys/
+├── rfd/
+├── scripts/
 ├── go.work
 └── go.work.sum
     

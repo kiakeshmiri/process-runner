@@ -25,7 +25,7 @@ It can be done in following steps:
 cd process_runner
 go work init ./api
 go work use ./client
-go work use ./internal/prunner
+go work use ./server
 
 ```
 
@@ -36,7 +36,7 @@ cd internal/prunner/
 go build -o prunner main.go
 sudo prunner
 ``` 
-
+ork use 
 ### Building the client
 
 ```bash
