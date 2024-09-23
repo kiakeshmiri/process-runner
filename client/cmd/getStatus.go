@@ -38,7 +38,20 @@ var getStatusCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Printf("Job Status: %s \n", res.Status)
+		var status string
+
+		switch res.Status {
+		case prunner.Status_RUNNING:
+			status = "Running"
+		case prunner.Status_STOPPED:
+			status = "Stopped"
+		case prunner.Status_COMPLETED:
+			status = "Completed"
+		case prunner.Status_EXITEDWITHERROR:
+			status = "Exited with error"
+
+		}
+		fmt.Printf("Job Status: %s \n", status)
 	},
 }
 

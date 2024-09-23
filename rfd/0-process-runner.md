@@ -59,13 +59,13 @@ Worker library with methods to start/stop/query status and stream the output of 
 
 Jobs Library and GRPC api are placed in the same folder for simplicity in this challenge, however they can be mored to seperate modules when needed. The references and dependencies are handled through go workspace.
 
-jobs.go file under lib folder handles the job related requests. A function called `ProcessRequest` will be the entry point for start and stop requests. `ProcessRequest` will consume a map storing Data Structure containing guid, the status of the process (started, stopped), logs.
+jobs.go file under lib folder handles the job related requests. A function called `ProcessRequest` will be the entry point for start and stop requests. `ProcessRequest` will consume a map storing Data Structure containing uuid, the status of the process (started, stopped), logs.
 
 
 ```go
 type Process struct {
 	Logs    *outputLogs 
-	Guid    string
+	UUID    string
 	Command string
 	Job     string
 	Args    []string
@@ -76,11 +76,15 @@ type Process struct {
 
 for  simplicity, status will be only "stopped" and "Started" or the string value of the error if Cmd.Start() or Cmd.Process.Kill() fails. Both start and stop command will run in go routine and do not block, therefore resource isolation through mutex is needed.
 
-Status can be retrieve by simply accessing map using guid.
+Status can be retrieve by simply accessing map using uuid.
 
 ```go
-guId := xxxxxx
-processMap[guId].Status
+uuid := xxxxxx
+
+mu.Lock()
+processMap[uuid].Status = status
+mu.Unlock()
+
 ```
 
 Logs will be a little more complicated since it needs to return stored logs from the time of process start and then stream the rest of logs. the function will run in goroutine and will return a directional channel. The method will reside in domain object.
@@ -91,7 +95,7 @@ GetLogsStream(ctx context.Context) <-chan string
 
 ### Syncronization
 
-Since `map[guid]domain.Process` will be a shared among different goroutines reading and writing to it simultaneously, `sync.Mutex` will be used to lock the memory during access. 
+Since `map[uuid]domain.Process` will be a shared among different goroutines reading and writing to it simultaneously, `sync.Mutex` will be used to lock the memory during access. 
 
 One of the examples of need for Mutex is when `io.writer` is constantly writing on the `[]byte` and the same time client is streaming the logs.
 
@@ -267,6 +271,8 @@ enum Status {
   RUNNING = 0;
   STOPPED = 1;
   CRASHED = 2;
+  EXITEDWITHERROR = 3;
+  COMPLETED = 4;
 }
 
 
@@ -385,7 +391,7 @@ Similar to server, Client needs to load and validate keys and certifications, fo
 Cli is the main interface for communicate with server. Cobra and Viper third party library will be used for implementation. The following commands and options will be implemented to fulfil the requirements:
 
 ```
-* startJob <Job> <Arguments>  	: Starts a new job and returns guid
+* startJob <Job> <Arguments>  	: Starts a new job and returns uuid
 * stopJob <uuid> 				: Kills the process
 * getStatus <uuid> 				: display status of the process
 * getLogs <uuid> 				: Streams the process logs 

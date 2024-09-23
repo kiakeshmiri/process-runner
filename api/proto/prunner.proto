@@ -54,4 +54,6 @@ enum Status {
   RUNNING = 0;
   STOPPED = 1;
   CRASHED = 2;
+  EXITEDWITHERROR = 3;
+  COMPLETED = 4;
 }
