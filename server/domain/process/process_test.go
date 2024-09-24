@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/kiakeshmiri/process-runner/server/internal/prunner/domain/process"
+	"github.com/kiakeshmiri/process-runner/server/domain/process"
 )
 
 func TestProcess_Write(t *testing.T) {

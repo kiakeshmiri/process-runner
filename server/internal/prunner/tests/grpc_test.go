@@ -29,7 +29,7 @@ func TestProcessRunnerServer_Authorization(t *testing.T) {
 	svc := ports.NewGrpcServer(application)
 	prunner.RegisterProcessServiceServer(server, svc)
 
-	_, err = svc.Start(ctx, &prunner.StartProcessRequest{Caller: "Client2"})
+	_, err = svc.Start(ctx, &prunner.StartProcessRequest{Caller: "ClientZ"})
 
 	if err == nil {
 		t.Error("Shoule return auth error")
@@ -66,5 +66,4 @@ func TestProcessRunnerServer_Start(t *testing.T) {
 			t.Error("Status should be stopped")
 		}
 	}
-
 }

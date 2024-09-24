@@ -90,6 +90,7 @@ func (g GrpcServer) GetLogs(req *pb.GetLogsRequest, srv pb.ProcessService_GetLog
 	if err != nil {
 		return err
 	}
+	//cancel streaming logs after 100 seconds
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Second*100))
 	defer cancel()
 

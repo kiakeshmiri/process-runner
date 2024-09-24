@@ -111,3 +111,49 @@ func TestMiltiProcess_Start(t *testing.T) {
 	}
 
 }
+
+func TestProcess_Multiple_Logs(t *testing.T) {
+	t.Parallel()
+
+	processMap := make(map[string]*process.Process)
+	pingProcess := process.NewProcess("ping", []string{"amazon.com"}, "start")
+	pingProcess.TestMode = true
+
+	uuid := lib.ProcessRequest(processMap, pingProcess)
+
+	if uuid == "" {
+		t.Errorf("NewProcess.Pid shoud have value")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(time.Second*10))
+	defer cancel()
+
+	logsCh1 := pingProcess.Logs.GetLogsStream(ctx)
+
+	channel_len := 0
+
+	for logItem := range logsCh1 {
+		t.Log(logItem)
+		channel_len++
+	}
+
+	if channel_len == 0 {
+		t.Errorf("logs should not be enpty")
+	}
+
+	ctx2, cancel2 := context.WithTimeout(context.Background(), time.Duration(time.Second*5))
+	defer cancel2()
+
+	logsCh2 := pingProcess.Logs.GetLogsStream(ctx2)
+
+	channel_len2 := 0
+
+	for logItem := range logsCh2 {
+		t.Log(logItem)
+		channel_len2++
+	}
+
+	if channel_len2 == 0 {
+		t.Errorf("second logs should not be enpty")
+	}
+}
