@@ -385,7 +385,7 @@ Client is designed to communicate through GRPC as only protocol for now. It basi
 
 ### Client Authentication
 
-Similar to server, Client needs to load and validate keys and certifications, for Authorization client extract cname from client certificates populates it to every call that needs authorization on server.
+Similar to server, Client needs to load and validate keys and certifications, for Authorization client extract cname from client certificates populates it to every call that needs authorization on server. In real world caller will be encrypted and only server can decrypt it using private key but for this demo, client extract and inject it as plain text.
 
 ### Cli
 
