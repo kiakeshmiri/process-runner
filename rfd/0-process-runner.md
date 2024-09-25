@@ -412,7 +412,7 @@ Cli is the main interface for communicate with server. Cobra and Viper third par
 There are 2 scripts in this project 
 
 1.	proto.sh generates proto definitions and GRPC calls 
-2.	tls.sh generates server and client keys based on keys/csr.json and sign them  
+2.	tls.sh generates server and client keys based on cfssl.json, client-csr.json and server-cli.json and sign them  
 
 
 ## Building and Running the solution
@@ -421,7 +421,7 @@ The solution consists of 3 modules :
 
 *	api : github.com/kiakeshmiri/process-runner/api
 *   client: github.com/kiakeshmiri/process-runner/client
-* 	server: github.com/kiakeshmiri/process-runner/internal/prunner
+* 	server: github.com/kiakeshmiri/process-runner/server
 
 The dependencies are handles through go.work. if the repo is pulled in folder with different names than original, then workspace setup may be needed.
 
@@ -432,23 +432,35 @@ It can be done in following steps:
 cd process_runner
 go work init ./api
 go work use ./client
-go work use ./internal/prunner
+go work use ./server
 
 ```
+### Building proto
+
+```bash
+make proto
+``` 
+
+### Generating keys / certs
+
+```bash
+make generate-keys
+``` 
 
 ### Building and runnung server
 
 ```bash
-cd internal/prunner/
-go build -o prunner main.go
-sudo prunner
+make build-server
+
+sudo ./prunner
 ``` 
 
-### Building the client
+### Building and running the client
 
 ```bash
-cd client/cli
-go build -o cli main.go
+make build-client
+
+./jobscli command {args}
 
 ``` 
 
