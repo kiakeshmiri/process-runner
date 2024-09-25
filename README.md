@@ -29,27 +29,33 @@ go work use ./server
 
 ```
 
+### Building proto
+
+```bash
+make proto
+``` 
+
+### Generating keys / certs
+
+```bash
+make generate-keys
+``` 
+
 ### Building and runnung server
 
 ```bash
-cd internal/prunner/
-go build -o prunner main.go
-sudo prunner
-``` 
-ork use 
-### Building the client
+make build-server
 
-```bash
-cd client/cli
-go build -o cli main.go
-
+sudo ./prunner
 ``` 
 
-## Running client 
+### Building and running the client
 
 ```bash
- cd process_runner/internal/prunner/client
- go run main.go
-```
+make build-client
+
+./jobscli command {args}
+
+``` 
 
 Before building client or server both proto.sh and tls.sh must be executed

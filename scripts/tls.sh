@@ -1,3 +1,5 @@
+cd ./keys
+
 cfssl selfsign -config cfssl.json --profile rootca "Teleport CA" server-csr.json | cfssljson -bare root
 cfssl selfsign -config cfssl.json --profile rootca "Teleport CA" client-csr.json | cfssljson -bare root
 

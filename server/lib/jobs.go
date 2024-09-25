@@ -6,10 +6,14 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"time"
 
-	"github.com/google/uuid"
 	"github.com/kiakeshmiri/process-runner/server/domain/process"
 )
+
+func GenerateTimestampID(pid int) string {
+	return fmt.Sprintf("%d-%d", time.Now().Unix(), pid)
+}
 
 func ProcessRequest(processMap map[string]*process.Process, p *process.Process) string {
 
@@ -49,7 +53,7 @@ func ProcessRequest(processMap map[string]*process.Process, p *process.Process) 
 				p.Status = "started"
 			}
 
-			uuid := uuid.NewString()
+			uuid := GenerateTimestampID(cmd.Process.Pid)
 
 			p.UUID = uuid
 			p.Cmd = cmd

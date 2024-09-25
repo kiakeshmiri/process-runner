@@ -27,7 +27,7 @@ func RunGRPCServer(registerServer func(server *grpc.Server)) {
 
 func RunGRPCServerOnAddr(addr string, registerServer func(server *grpc.Server)) {
 
-	tlsConfig, err := LoadTLSConfig("../../../keys/server.pem", "../../../keys/server-key.pem", "../../../keys/root.pem")
+	tlsConfig, err := LoadTLSConfig("../keys/server.pem", "../keys/server-key.pem", "../keys/root.pem")
 	if err != nil {
 		panic(err)
 	}

@@ -210,7 +210,7 @@ The discussion about using nice is out of scope but I can explain it if needed.
 
 ## API Server
 
-The structure of the project facilitate a way to have several ports (i.e. Http OpenAPI, Grpcc, GraphQL, ...). as mentioned only GRPC port will be provided within this challenge.\
+The structure of the project facilitate a way to have several ports (i.e. Http OpenAPI, Grpcc, GraphQL, ...). as mentioned only GRPC port will be provided within this challenge.
 
 ### API definition
 
@@ -403,9 +403,9 @@ Cli is the main interface for communicate with server. Cobra and Viper third par
 
 * jobcli startJob ping google.com 
 * jobcli startJob myjob
-* jobcli stopJob 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
-* jobcli getStatus 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
-* jobcli getLogs 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
+* jobcli stopJob 1727280806-59748
+* jobcli getStatus 1727280806-59748
+* jobcli getLogs 1727280806-59748
 
 ## Scripts
 
