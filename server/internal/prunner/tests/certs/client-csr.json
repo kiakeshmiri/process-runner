@@ -4,6 +4,6 @@
       "algo": "ecdsa",
       "size": 256
     },
-    "CN": "Client1",
+    "CN": "NotAuthorized",
     "names": []
   }

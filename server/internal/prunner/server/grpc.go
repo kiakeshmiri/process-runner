@@ -32,8 +32,12 @@ func RunGRPCServerOnAddr(addr string, registerServer func(server *grpc.Server)) 
 		panic(err)
 	}
 
+	authInterceptor := NewAuthInterceptor()
+
 	opts := []grpc.ServerOption{
 		grpc.Creds(tlsConfig),
+		grpc.UnaryInterceptor(authInterceptor.UnaryInterceptor),
+		grpc.StreamInterceptor(authInterceptor.StreamInterceptor),
 	}
 
 	grpcServer := grpc.NewServer(opts...)

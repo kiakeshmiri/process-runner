@@ -18,7 +18,7 @@ var startJobCmd = &cobra.Command{
 	Short: "Starts a job on linux machine",
 	Long:  `TBD`,
 	Run: func(cmd *cobra.Command, args []string) {
-		pr, cname, err := NewClient()
+		pr, err := NewClient()
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)
 		}
@@ -29,7 +29,7 @@ var startJobCmd = &cobra.Command{
 		job := args[0]
 		jobArgs := args[1:]
 
-		opt := &prunner.StartProcessRequest{Job: job, Args: jobArgs, Caller: cname}
+		opt := &prunner.StartProcessRequest{Job: job, Args: jobArgs}
 
 		res, err := pr.Start(ctx, opt)
 

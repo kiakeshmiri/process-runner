@@ -16,9 +16,9 @@ var (
 	addr = flag.String("addr", "localhost:50051", "the address to connect to")
 )
 
-func NewClient() (client prunner.ProcessServiceClient, cname string, err error) {
+func NewClient() (client prunner.ProcessServiceClient, err error) {
 
-	tlsConfig, cname, err := LoadTLSConfig("../keys/client.pem", "../keys/client-key.pem", "../keys/root.pem")
+	tlsConfig, err := LoadTLSConfig("../keys/client.pem", "../keys/client-key.pem", "../keys/root.pem")
 	if err != nil {
 		panic(err)
 	}
@@ -28,26 +28,24 @@ func NewClient() (client prunner.ProcessServiceClient, cname string, err error) 
 		panic(err)
 	}
 
-	return prunner.NewProcessServiceClient(conn), cname, nil
+	return prunner.NewProcessServiceClient(conn), nil
 }
 
-func LoadTLSConfig(certFile string, keyFile string, caFile string) (credentials.TransportCredentials, string, error) {
+func LoadTLSConfig(certFile string, keyFile string, caFile string) (credentials.TransportCredentials, error) {
 
 	certificate, err := tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to load client certification: %w", err)
+		return nil, fmt.Errorf("failed to load client certification: %w", err)
 	}
-
-	cn := certificate.Leaf.Subject.CommonName
 
 	ca, err := os.ReadFile(caFile)
 	if err != nil {
-		return nil, "", fmt.Errorf("faild to read CA certificate: %w", err)
+		return nil, fmt.Errorf("faild to read CA certificate: %w", err)
 	}
 
 	capool := x509.NewCertPool()
 	if !capool.AppendCertsFromPEM(ca) {
-		return nil, "", fmt.Errorf("faild to append the CA certificate to CA pool")
+		return nil, fmt.Errorf("faild to append the CA certificate to CA pool")
 	}
 
 	tlsConfig := &tls.Config{
@@ -55,5 +53,5 @@ func LoadTLSConfig(certFile string, keyFile string, caFile string) (credentials.
 		RootCAs:      capool,
 	}
 
-	return credentials.NewTLS(tlsConfig), cn, nil
+	return credentials.NewTLS(tlsConfig), nil
 }

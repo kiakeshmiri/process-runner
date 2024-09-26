@@ -18,7 +18,7 @@ var getStatusCmd = &cobra.Command{
 	Short: "provides status of the process",
 	Long:  `TBD`,
 	Run: func(cmd *cobra.Command, args []string) {
-		pr, user, err := NewClient()
+		pr, err := NewClient()
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)
 		}
@@ -31,7 +31,7 @@ var getStatusCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		req := &prunner.GetStatusRequest{Uuid: uuid, Caller: user}
+		req := &prunner.GetStatusRequest{Uuid: uuid}
 
 		res, err := pr.GetStatus(ctx, req)
 

@@ -29,10 +29,10 @@ func TestProcessRunnerServer_Authorization(t *testing.T) {
 	svc := ports.NewGrpcServer(application)
 	prunner.RegisterProcessServiceServer(server, svc)
 
-	_, err = svc.Start(ctx, &prunner.StartProcessRequest{Caller: "ClientZ"})
+	_, err = svc.Start(ctx, &prunner.StartProcessRequest{Job: "pstree"})
 
 	if err == nil {
-		t.Error("Shoule return auth error")
+		t.Error("Should return auth error")
 	}
 
 	if err != nil && err.Error() != "not authorized" {
@@ -59,7 +59,7 @@ func TestProcessRunnerServer_Start(t *testing.T) {
 	svc := ports.NewGrpcServer(application)
 	prunner.RegisterProcessServiceServer(server, svc)
 
-	resp, err := svc.GetStatus(ctx, &prunner.GetStatusRequest{Uuid: "123", Caller: "Client1"})
+	resp, err := svc.GetStatus(ctx, &prunner.GetStatusRequest{Uuid: "123"})
 
 	if err != nil {
 		if resp.Status != prunner.Status_STOPPED {

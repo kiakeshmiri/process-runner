@@ -14,7 +14,6 @@ service ProcessService {
 message StartProcessRequest {
   string job = 1;
   repeated string args = 2;
-  string caller = 3;
 }
 
 message StartProcessResponse {
@@ -24,7 +23,6 @@ message StartProcessResponse {
 
 message StopProcessRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message StopProcessResponse {
@@ -33,17 +31,14 @@ message StopProcessResponse {
 
 message GetStatusRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message GetStatusResponse {
   Status status = 1;
-  string caller = 2; // The user who started the process
 }
 
 message GetLogsRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message GetLogsResponse {

@@ -18,7 +18,7 @@ var stopJobCmd = &cobra.Command{
 	Short: "Stops the running job by passing uuid",
 	Long:  `TBD`,
 	Run: func(cmd *cobra.Command, args []string) {
-		pr, cname, err := NewClient()
+		pr, err := NewClient()
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)
 		}
@@ -31,7 +31,7 @@ var stopJobCmd = &cobra.Command{
 			log.Fatal(err)
 		}
 
-		opt := &prunner.StopProcessRequest{Uuid: uuid, Caller: cname}
+		opt := &prunner.StopProcessRequest{Uuid: uuid}
 
 		res, err := pr.Stop(ctx, opt)
 

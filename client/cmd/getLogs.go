@@ -20,7 +20,7 @@ var getLogsCmd = &cobra.Command{
 	Short: "Prints process logs",
 	Long:  ``,
 	Run: func(cmd *cobra.Command, args []string) {
-		pr, cname, err := NewClient()
+		pr, err := NewClient()
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)
 		}
@@ -32,7 +32,7 @@ var getLogsCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		opt := &prunner.GetLogsRequest{Uuid: uuid, Caller: cname}
+		opt := &prunner.GetLogsRequest{Uuid: uuid}
 		logStream, err := pr.GetLogs(ctx, opt)
 		if err != nil {
 			log.Fatal(err)

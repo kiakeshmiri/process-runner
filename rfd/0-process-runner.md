@@ -232,7 +232,6 @@ service ProcessService {
 message StartProcessRequest {
   string job = 1;
   repeated string args = 2;
-  string caller = 3;
 }
 
 message StartProcessResponse {
@@ -242,7 +241,6 @@ message StartProcessResponse {
 
 message StopProcessRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message StopProcessResponse {
@@ -251,17 +249,14 @@ message StopProcessResponse {
 
 message GetStatusRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message GetStatusResponse {
   Status status = 1;
-  string caller = 2; // The user who started the process
 }
 
 message GetLogsRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message GetLogsResponse {
@@ -275,7 +270,6 @@ enum Status {
   EXITEDWITHERROR = 3;
   COMPLETED = 4;
 }
-
 
 ```
 
@@ -291,7 +285,7 @@ by using mTLS, The client certificate is also needed to be added as a trusted ce
 
 Obviously for this demo, roles table will be define in memory. 
 
-Server uses crypto and X509 to load and validate client certifications and pass the ```tlsConfig``` to grpc client connection. In the process of loading config client will read cname from cert file and will populate it to caller property on each call sending to server to roll based authorization. 
+Server uses crypto and X509 to load and validate client certifications and pass the ```tlsConfig``` to grpc client connection. Interceptors on grpc server side will extract client cName from request and along with MethodName will determine if call is authorized. 
 
 The example of client TLS config:
 
@@ -371,7 +365,7 @@ for this demo simple authorization table is hard coded and there is no roles or 
 
 ```go
 	authMap := map[string][]string{
-		"Client1": {"start", "stop", "getStatus", "getLogs"},
+		"Client1": {"Start", "Stop", "GetStatus", "GetLogs"},
 	}
 ```
 
