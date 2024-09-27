@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	pb "github.com/kiakeshmiri/process-runner/api/protogen"
@@ -21,7 +22,13 @@ func (g GrpcServer) Start(ctx context.Context, req *pb.StartProcessRequest) (*pb
 
 	uuid := g.app.Commands.StartProcess.Handle(ctx, req.Job, req.Args)
 
-	return &pb.StartProcessResponse{Uuid: uuid, Owner: g.getClient(ctx)}, nil
+	clientId, err := g.getClient(ctx)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.StartProcessResponse{Uuid: uuid, Owner: clientId}, nil
 }
 
 func (g GrpcServer) Stop(ctx context.Context, req *pb.StopProcessRequest) (*pb.StopProcessResponse, error) {
@@ -35,8 +42,16 @@ func (g GrpcServer) Stop(ctx context.Context, req *pb.StopProcessRequest) (*pb.S
 func (g GrpcServer) GetStatus(ctx context.Context, req *pb.GetStatusRequest) (*pb.GetStatusResponse, error) {
 
 	ps, err := g.app.Queries.GetStatus.Handle(ctx, req.Uuid)
+	if err != nil {
+		return nil, err
+	}
 
-	res := &pb.GetStatusResponse{Owner: g.getClient(ctx)}
+	clientId, err := g.getClient(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	res := &pb.GetStatusResponse{Owner: clientId}
 	switch ps {
 	case "started":
 		res.Status = pb.Status_RUNNING
@@ -70,7 +85,10 @@ func (g GrpcServer) GetLogs(req *pb.GetLogsRequest, srv pb.ProcessService_GetLog
 	return nil
 }
 
-func (g GrpcServer) getClient(ctx context.Context) string {
+func (g GrpcServer) getClient(ctx context.Context) (string, error) {
 	cid := ctx.Value(&clients.ClientContext{})
-	return cid.(string)
+	if cid == nil || cid == "" {
+		return "", errors.New("not authorized")
+	}
+	return cid.(string), nil
 }
