@@ -25,7 +25,7 @@ Project structure:
 process-runner
 ├── api/
 |   └── proto/
-|   |   └── prunner.proto
+|       └── prunner.proto
 |	└──  protogen/
 ├── client
 |   └── cmd/
@@ -33,7 +33,7 @@ process-runner
 ├── rfd/
 ├── lib/
 |   ├── adapters/
-|	├── cgroup/
+|   ├── cgroup/
 |   └── domain/
 ├── scripts/
 ├── server/
