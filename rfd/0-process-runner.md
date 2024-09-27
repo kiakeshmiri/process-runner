@@ -24,8 +24,8 @@ Project structure:
 ```
 process-runner
 ├── api/
-|   └── proto/
-|       └── prunner.proto
+|   ├── proto/
+|   |   └── prunner.proto
 |	└──  protogen/
 ├── client
 |   └── cmd/
