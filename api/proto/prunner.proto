@@ -14,18 +14,16 @@ service ProcessService {
 message StartProcessRequest {
   string job = 1;
   repeated string args = 2;
-  repeated CgroupOprions cgroup_oprions = 3;
-  repeated UnshareOprions unshare_otions = 4;
 }
 
 message StartProcessResponse {
-  string status = 1;
-  int32 pid = 2;
+  Status status = 1;
+  string uuid = 2;
+  string owner = 3;
 }
 
 message StopProcessRequest {
-  string Status = 1;
-  int32 pid = 2;
+  string uuid = 1;
 }
 
 message StopProcessResponse {
@@ -33,34 +31,26 @@ message StopProcessResponse {
 }
 
 message GetStatusRequest {
-  int32 pid = 1;
+  string uuid = 1;
 }
 
 message GetStatusResponse {
   Status status = 1;
+  string owner = 2;
 }
 
 message GetLogsRequest {
-  int32 pid = 1;
+  string uuid = 1;
 }
 
 message GetLogsResponse {
-  string log = 1;
+  bytes log = 1;
 }
 
 enum Status {
   RUNNING = 0;
   STOPPED = 1;
-}
-
-enum CgroupOprions {
-  MEMORY = 0;
-  CPU = 1;
-  IO = 2;
-}
-
-enum UnshareOprions {
-  PID = 0;
-  NETWORK = 1;
-  MOUNT = 2;
+  CRASHED = 2;
+  EXITEDWITHERROR = 3;
+  COMPLETED = 4;
 }
