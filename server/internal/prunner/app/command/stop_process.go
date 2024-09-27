@@ -3,8 +3,8 @@ package command
 import (
 	"context"
 
-	"github.com/kiakeshmiri/process-runner/server/domain/process"
-	"github.com/kiakeshmiri/process-runner/server/lib"
+	"github.com/kiakeshmiri/process-runner/lib"
+	"github.com/kiakeshmiri/process-runner/lib/domain/process"
 )
 
 type StopProcessHandler struct {

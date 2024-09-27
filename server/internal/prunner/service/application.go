@@ -1,7 +1,7 @@
 package service
 
 import (
-	"github.com/kiakeshmiri/process-runner/server/domain/process"
+	"github.com/kiakeshmiri/process-runner/lib/domain/process"
 	"github.com/kiakeshmiri/process-runner/server/internal/prunner/app"
 	"github.com/kiakeshmiri/process-runner/server/internal/prunner/app/command"
 	"github.com/kiakeshmiri/process-runner/server/internal/prunner/app/query"

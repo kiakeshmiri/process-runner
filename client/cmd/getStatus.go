@@ -51,7 +51,7 @@ var getStatusCmd = &cobra.Command{
 			status = "Exited with error"
 
 		}
-		fmt.Printf("Job Status: %s \n", status)
+		fmt.Printf("Job Status: %s, Owner: %s\n", status, res.Owner)
 	},
 }
 

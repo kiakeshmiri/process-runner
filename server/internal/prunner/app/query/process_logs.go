@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/kiakeshmiri/process-runner/server/domain/process"
+	"github.com/kiakeshmiri/process-runner/lib/domain/process"
 )
 
 type ProcessLogsHandler struct {
@@ -21,7 +21,6 @@ func (p ProcessLogsHandler) Handle(ctx context.Context, uuid string) (<-chan []b
 	if !exists {
 		return nil, errors.New("process id does not exists")
 	}
-	pm.ConnNun++
 	logsChan := pm.Logs.GetLogsStream(ctx)
 
 	return logsChan, nil

@@ -11,10 +11,27 @@ import (
 	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/peer"
 	"google.golang.org/grpc/status"
+
+	"github.com/kiakeshmiri/process-runner/lib/domain/clients"
 )
 
 type AuthInterceptor struct {
 	accessibleRoles map[string][]string
+}
+
+type streamWrapper struct {
+	grpc.ServerStream
+}
+
+// Context overrides the wrapped grpc.ServerStream's Context(), finds the
+// userID, and adds it to the returned context.
+func (s *streamWrapper) Context() context.Context {
+	ctx := s.ServerStream.Context()
+
+	clientID := getClientID(ctx)
+	newCtx := context.WithValue(ctx, &clients.ClientContext{}, clientID)
+
+	return newCtx
 }
 
 func NewAuthInterceptor() *AuthInterceptor {
@@ -33,12 +50,14 @@ func (interceptor *AuthInterceptor) UnaryInterceptor(
 	handler grpc.UnaryHandler,
 ) (interface{}, error) {
 
-	err := interceptor.authorize(ctx, info.FullMethod)
+	clientID, err := interceptor.authorize(ctx, info.FullMethod)
 	if err != nil {
 		return nil, err
 	}
 
-	return handler(ctx, req)
+	newCtx := context.WithValue(ctx, &clients.ClientContext{}, clientID)
+
+	return handler(newCtx, req)
 }
 
 func (interceptor *AuthInterceptor) StreamInterceptor(
@@ -48,15 +67,38 @@ func (interceptor *AuthInterceptor) StreamInterceptor(
 	handler grpc.StreamHandler,
 ) error {
 
-	err := interceptor.authorize(serverStream.Context(), info.FullMethod)
+	err := handler(server, &streamWrapper{ServerStream: serverStream})
+
 	if err != nil {
 		return err
 	}
-
-	return handler(server, serverStream)
+	return nil
 }
 
-func (interceptor *AuthInterceptor) authorize(ctx context.Context, method string) error {
+func (interceptor *AuthInterceptor) authorize(ctx context.Context, method string) (string, error) {
+	clientID := getClientID(ctx)
+
+	if clientID == "" {
+		return "", status.Error(codes.Unauthenticated, "unauthorized")
+	}
+
+	err := interceptor.checkAuthorization(clientID, method[strings.LastIndex(method, "/")+1:])
+	if err != nil {
+		return "", err
+	}
+	return clientID, nil
+}
+
+func (interceptor *AuthInterceptor) checkAuthorization(caller string, command string) error {
+	if client, exists := interceptor.accessibleRoles[caller]; exists {
+		if slices.Contains(client, command) {
+			return nil
+		}
+	}
+	return errors.New("not authorized")
+}
+
+func getClientID(ctx context.Context) string {
 	var clientID string
 	if p, ok := peer.FromContext(ctx); ok {
 		if mtls, ok := p.AuthInfo.(credentials.TLSInfo); ok {
@@ -67,19 +109,5 @@ func (interceptor *AuthInterceptor) authorize(ctx context.Context, method string
 			}
 		}
 	}
-
-	if clientID == "" {
-		return status.Error(codes.Unauthenticated, "unauthorized")
-	}
-
-	return interceptor.checkAuthorization(clientID, method[strings.LastIndex(method, "/")+1:])
-}
-
-func (interceptor *AuthInterceptor) checkAuthorization(caller string, command string) error {
-	if client, exists := interceptor.accessibleRoles[caller]; exists {
-		if slices.Contains(client, command) {
-			return nil
-		}
-	}
-	return errors.New("not authorized")
+	return clientID
 }

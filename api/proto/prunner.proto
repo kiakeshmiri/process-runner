@@ -19,6 +19,7 @@ message StartProcessRequest {
 message StartProcessResponse {
   Status status = 1;
   string uuid = 2;
+  string owner = 3;
 }
 
 message StopProcessRequest {
@@ -35,6 +36,7 @@ message GetStatusRequest {
 
 message GetStatusResponse {
   Status status = 1;
+  string owner = 2;
 }
 
 message GetLogsRequest {

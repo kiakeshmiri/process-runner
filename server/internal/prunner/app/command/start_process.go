@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"github.com/kiakeshmiri/process-runner/server/domain/process"
-	"github.com/kiakeshmiri/process-runner/server/lib"
+	"github.com/kiakeshmiri/process-runner/lib"
+	"github.com/kiakeshmiri/process-runner/lib/domain/process"
 )
 
 var mu sync.Mutex
@@ -20,8 +20,8 @@ func NewStartProcessHandler(processMap map[string]*process.Process) StartProcess
 
 func (s StartProcessHandler) Handle(ctx context.Context, job string, args []string) string {
 	process := process.NewProcess(job, args, process.Start)
-
 	process.TestMode = true
+
 	uuid := lib.ProcessRequest(s.processMap, process)
 
 	cmd := s.processMap[uuid].Cmd

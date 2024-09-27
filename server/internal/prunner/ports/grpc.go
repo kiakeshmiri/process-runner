@@ -5,6 +5,7 @@ import (
 	"time"
 
 	pb "github.com/kiakeshmiri/process-runner/api/protogen"
+	"github.com/kiakeshmiri/process-runner/lib/domain/clients"
 	"github.com/kiakeshmiri/process-runner/server/internal/prunner/app"
 )
 
@@ -20,7 +21,7 @@ func (g GrpcServer) Start(ctx context.Context, req *pb.StartProcessRequest) (*pb
 
 	uuid := g.app.Commands.StartProcess.Handle(ctx, req.Job, req.Args)
 
-	return &pb.StartProcessResponse{Uuid: uuid}, nil
+	return &pb.StartProcessResponse{Uuid: uuid, Owner: g.getClient(ctx)}, nil
 }
 
 func (g GrpcServer) Stop(ctx context.Context, req *pb.StopProcessRequest) (*pb.StopProcessResponse, error) {
@@ -33,9 +34,9 @@ func (g GrpcServer) Stop(ctx context.Context, req *pb.StopProcessRequest) (*pb.S
 
 func (g GrpcServer) GetStatus(ctx context.Context, req *pb.GetStatusRequest) (*pb.GetStatusResponse, error) {
 
-	ps, _, err := g.app.Queries.GetStatus.Handle(ctx, req.Uuid)
+	ps, err := g.app.Queries.GetStatus.Handle(ctx, req.Uuid)
 
-	res := &pb.GetStatusResponse{}
+	res := &pb.GetStatusResponse{Owner: g.getClient(ctx)}
 	switch ps {
 	case "started":
 		res.Status = pb.Status_RUNNING
@@ -67,4 +68,9 @@ func (g GrpcServer) GetLogs(req *pb.GetLogsRequest, srv pb.ProcessService_GetLog
 	}
 
 	return nil
+}
+
+func (g GrpcServer) getClient(ctx context.Context) string {
+	cid := ctx.Value(&clients.ClientContext{})
+	return cid.(string)
 }

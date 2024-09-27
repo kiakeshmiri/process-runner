@@ -36,7 +36,7 @@ var startJobCmd = &cobra.Command{
 		if err != nil {
 			log.Fatal(err)
 		}
-		fmt.Println(res)
+		fmt.Printf("Job Id: %s, Owner: %s \n", res.Uuid, res.Owner)
 	},
 }
 
