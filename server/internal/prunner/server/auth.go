@@ -23,8 +23,6 @@ type streamWrapper struct {
 	grpc.ServerStream
 }
 
-// Context overrides the wrapped grpc.ServerStream's Context(), finds the
-// userID, and adds it to the returned context.
 func (s *streamWrapper) Context() context.Context {
 	ctx := s.ServerStream.Context()
 
@@ -35,6 +33,7 @@ func (s *streamWrapper) Context() context.Context {
 }
 
 func NewAuthInterceptor() *AuthInterceptor {
+	//Authorization table
 	accessibleRoles := map[string][]string{
 		"Client1": {"Start", "Stop", "GetStatus", "GetLogs"},
 		"Client2": {"Stop", "GetStatus", "GetLogs"},
