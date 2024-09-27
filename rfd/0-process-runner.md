@@ -26,7 +26,7 @@ process-runner
 ├── api/
 |   ├── proto/
 |   |   └── prunner.proto
-|	└──  protogen/
+|   └──  protogen/
 ├── client
 |   └── cmd/
 ├── keys/
