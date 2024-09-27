@@ -19,28 +19,30 @@ for the purpose if this demo only GRPC port is included.
 
 Both library and API will leverage domain.  
 
-`api / library` package file structure:
+Project structure:
 
 ```
 process-runner
 ├── api/
-|   └── proto/
+|   ├── proto/
 |   |   └── prunner.proto
-|	└──  protogen/
+|   └──  protogen/
 ├── client
 |   └── cmd/
-├── server/
-|	├── internal/
-|	|   └── prunner
-|	|       ├── app/
-|	|       ├── ports/
-|	|       ├── server/
-|	|       └── service/
-|   ├── domain/
-|   └── lib/
 ├── keys/
 ├── rfd/
+├── lib/
+|   ├── adapters/
+|   ├── cgroup/
+|   └── domain/
 ├── scripts/
+├── server/
+|	└── internal/
+|	    └── prunner
+|	        ├── app/
+|	        ├── ports/
+|	        ├── server/
+|	        └── service/
 ├── go.work
 └── go.work.sum
     
@@ -150,7 +152,7 @@ So based on above code only shared data among processes is ```so.data```. that's
 
 Application should lock resource properly in this case we are talking about []byte that is shared between cmd.Stdout and getLogs goroutine. cmd may keep adding data to the []byte while it's running, and other goroutined will keep reading or waiting for new data to be added. To make sure there is no race condition server will build with -race option which is not recommended for production but it will help debugging.
 
-### resource control for CPU, Memory and Disk IO per job using cgroups.
+### resource control for CPU, Memory and Disk IO per job using cgroups
 
 
 Resource control can be added by using ```mkdir /sys/fs/cgroup/mygroup``` command. It will create a group under ```/sys/fs/cgroup/```. for example running ```mkdir /sys/fs/cgroup/mygroup``` command will create the following file structure under /sys/fs/cgroup/mygroup:
@@ -170,21 +172,10 @@ cgroup.threads          cpu.weight.nice  memory.max           memory.swap.max
 ```
 
 
-After adding / updating the cpu, memory, io config the Job can be run by using ```cgexec```. for example ```sudo cgexec -g memory:jobgroup myjob```
+After adding / updating the cpu, memory, io config the Job can be run by passing following options to command to guaranty isolation and group control.
 
-Ir will be done in code like this:
 
-```go
-
-exec.Command("mkdir /sys/fs/cgroup/jobgroup").Run()
-...
-cmdArgs := []string{"-g", fmt.Sprintf("%s:proc-%s", opts, p.Job), p.Job}
-cmdArgs = append(args, p.Args...)
-
-cmd = exec.Command("cgexec", cmdArgs...)
-```
-
-### Suggested cgroup Limitations:
+### Suggested cgroup settings
 
 memory.low = 10G makes the process exempt from taking away memory if usage is under 10 GB. The only time that memory can take away id a global memory shortage.
 this will help to avoid limiting all other processes memory.
@@ -206,11 +197,61 @@ echo "8:16 wbps=1Mib wiops=120" > io.max
 echo "512" > cpu.wwight
 ```
 
-The discussion about using nice is out of scope but I can explain it if needed.
+The values in cgroups will be handled in 3 controllers created under cgroup durectory. 
+
+* io
+* cpu
+* memory
+
+Tests along with Mocks are also included. The following sample settings  will be added to any new job. Please feel free to comment / change values or modift controllers to be able to control more values. Among all of the examples memory.low is the most interesting since it's widely used in high traffic social platforms.
+
+```go
+func prepareCgroupFD() int {
+
+	const O_PATH = 0x200000 // Same for all architectures, but for some reason not defined in syscall for 386||amd64.
+
+	// Requires cgroup v2.
+	const prefix = "/sys/fs/cgroup"
+	...
+
+	cpuCtrl := cgroup.NewCpuController(osAdapter)
+	cpuCtrl.CpuMax = 50000
+	cpuCtrl.Save(subCgroup)
+
+	ioCtrl := cgroup.NewIoController(osAdapter)
+	ioCtrl.Rbps = 2097152
+	ioCtrl.Wiops = 120
+	ioCtrl.Save(subCgroup)
+
+	memoryCtrl := cgroup.NewMemoryController(osAdapter)
+	memoryCtrl.MemoryLow = "10G"
+	memoryCtrl.Save(subCgroup)
+	...
+}
+
+```
+
+## Resource Isolation
+
+Provided solution will provide isolation for processes, mount and host names
+```go
+
+	// Cloneflags is only available in Linux
+	// CLONE_NEWUTS namespace isolates hostname
+	// CLONE_NEWPID namespace isolates processes
+	// CLONE_NEWNS namespace isolates mounts
+	cmd.SysProcAttr = &syscall.SysProcAttr{
+		Cloneflags:   syscall.CLONE_NEWUTS | syscall.CLONE_NEWPID | syscall.CLONE_NEWNS,
+		UseCgroupFD:  true,
+		CgroupFD:     fd,
+		Unshareflags: syscall.CLONE_NEWNS | syscall.CLONE_NEWNET,
+	}
+```
+
 
 ## API Server
 
-The structure of the project facilitate a way to have several ports (i.e. Http OpenAPI, Grpcc, GraphQL, ...). as mentioned only GRPC port will be provided within this challenge.\
+The structure of the project facilitate a way to have several ports (i.e. Http OpenAPI, Grpcc, GraphQL, ...). as mentioned only GRPC port will be provided within this challenge.
 
 ### API definition
 
@@ -232,7 +273,6 @@ service ProcessService {
 message StartProcessRequest {
   string job = 1;
   repeated string args = 2;
-  string caller = 3;
 }
 
 message StartProcessResponse {
@@ -242,7 +282,6 @@ message StartProcessResponse {
 
 message StopProcessRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message StopProcessResponse {
@@ -251,17 +290,14 @@ message StopProcessResponse {
 
 message GetStatusRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message GetStatusResponse {
   Status status = 1;
-  string caller = 2; // The user who started the process
 }
 
 message GetLogsRequest {
   string uuid = 1;
-  string caller = 2;
 }
 
 message GetLogsResponse {
@@ -275,7 +311,6 @@ enum Status {
   EXITEDWITHERROR = 3;
   COMPLETED = 4;
 }
-
 
 ```
 
@@ -291,7 +326,7 @@ by using mTLS, The client certificate is also needed to be added as a trusted ce
 
 Obviously for this demo, roles table will be define in memory. 
 
-Server uses crypto and X509 to load and validate client certifications and pass the ```tlsConfig``` to grpc client connection. In the process of loading config client will read cname from cert file and will populate it to caller property on each call sending to server to roll based authorization. 
+Server uses crypto and X509 to load and validate client certifications and pass the ```tlsConfig``` to grpc client connection. Interceptors on grpc server side will extract client cName from request and along with MethodName will determine if call is authorized. 
 
 The example of client TLS config:
 
@@ -365,13 +400,13 @@ client-csr.json:
 }
 ```
 
-#### authorization table
+#### Authorization table
 
 for this demo simple authorization table is hard coded and there is no roles or groups
 
 ```go
 	authMap := map[string][]string{
-		"Client1": {"start", "stop", "getStatus", "getLogs"},
+		"Client1": {"Start", "Stop", "GetStatus", "GetLogs"},
 	}
 ```
 
@@ -403,16 +438,16 @@ Cli is the main interface for communicate with server. Cobra and Viper third par
 
 * jobcli startJob ping google.com 
 * jobcli startJob myjob
-* jobcli stopJob 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
-* jobcli getStatus 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
-* jobcli getLogs 2c14a6ac-a49d-4bac-bb25-53c7ed021e17
+* jobcli stopJob 1727280806-59748
+* jobcli getStatus 1727280806-59748
+* jobcli getLogs 1727280806-59748
 
 ## Scripts
 
 There are 2 scripts in this project 
 
 1.	proto.sh generates proto definitions and GRPC calls 
-2.	tls.sh generates server and client keys based on keys/csr.json and sign them  
+2.	tls.sh generates server and client keys based on cfssl.json, client-csr.json and server-cli.json and sign them  
 
 
 ## Building and Running the solution
@@ -421,7 +456,7 @@ The solution consists of 3 modules :
 
 *	api : github.com/kiakeshmiri/process-runner/api
 *   client: github.com/kiakeshmiri/process-runner/client
-* 	server: github.com/kiakeshmiri/process-runner/internal/prunner
+* 	server: github.com/kiakeshmiri/process-runner/server
 
 The dependencies are handles through go.work. if the repo is pulled in folder with different names than original, then workspace setup may be needed.
 
@@ -432,23 +467,35 @@ It can be done in following steps:
 cd process_runner
 go work init ./api
 go work use ./client
-go work use ./internal/prunner
+go work use ./server
 
 ```
+### Building proto
+
+```bash
+make proto
+``` 
+
+### Generating keys / certs
+
+```bash
+make generate-keys
+``` 
 
 ### Building and runnung server
 
 ```bash
-cd internal/prunner/
-go build -o prunner main.go
-sudo prunner
+make build-server
+
+sudo ./prunner
 ``` 
 
-### Building the client
+### Building and running the client
 
 ```bash
-cd client/cli
-go build -o cli main.go
+make build-client
+
+./jobscli command {args}
 
 ``` 
 
