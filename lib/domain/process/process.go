@@ -4,7 +4,6 @@ import (
 	"context"
 	"os/exec"
 	"sync"
-	"time"
 )
 
 type ProcessStatus string
@@ -77,9 +76,6 @@ func (so *outputLogs) GetLogsStream(ctx context.Context) <-chan []byte {
 			case <-ctx.Done():
 				return
 			default:
-				//give provide some time to cmd process to accumulate some logs.
-				time.Sleep(time.Duration(time.Millisecond * 100))
-
 				mu.Lock()
 				ln := len(so.data)
 
