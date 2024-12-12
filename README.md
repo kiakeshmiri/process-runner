@@ -117,23 +117,37 @@ func Write(p []byte) (n int, err error) {
 	return len(p), nil
 }
 
-func (so *outputLogs) GetLogsStream(ctx context.Context) <-chan string {
-	logChan := make(chan string)
+func (so *outputLogs) GetLogsStream(ctx context.Context) <-chan []byte {
+	logChan := make(chan []byte)
 	go func() {
-		...
+		defer close(logChan)
+
+		firstScan := true
+		var pointer int
+
 		for {
 			select {
 			case <-ctx.Done():
 				return
 			default:
-				time.Sleep(time.Duration(time.Millisecond * 10))
-
 				mu.Lock()
 				ln := len(so.data)
-				// read eaither from begining of so.data or continue reading  if it's not first read until cancel
-				mu.Unlock()
 
-				logChan <- log
+				var chunk []byte
+
+				if ln > 0 {
+					if firstScan {
+						chunk = so.data[:ln]
+						firstScan = false
+					} else {
+						chunk = so.data[pointer:ln]
+					}
+					pointer = ln
+				}
+				if len(chunk) > 0 {
+					logChan <- chunk
+				}
+				mu.Unlock()
 			}
 		}
 	}()
